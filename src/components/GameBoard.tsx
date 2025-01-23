@@ -182,6 +182,10 @@ const RandomConnections: React.FC = () => {
     { id: number; name: string; image: string }[]
   >([]);
 
+  useEffect(() => {
+    console.log("Initial characters set:", initialCharacters);
+  }, [initialCharacters]);
+
   const initializeBoard = (newBoard: boolean) => {
     setCorrectConnections([]);
     setAttemptsLeft(3);
