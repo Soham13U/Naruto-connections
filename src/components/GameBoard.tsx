@@ -10,7 +10,7 @@ export interface Connection {
 }
 
 export const connections: Connection[] = [
-  {
+  /* {
     category: "Personal - Status",
     apiField: "personal.status",
     value: "deceased",
@@ -18,7 +18,7 @@ export const connections: Connection[] = [
   { category: "Nature Type", apiField: "natureType", value: "Wind Release" },
   { category: "Nature Type", apiField: "natureType", value: "Fire Release" },
   { category: "Nature Type", apiField: "natureType", value: "Earth Release" },
-  { category: "Nature Type", apiField: "natureType", value: "Water Release" },
+  { category: "Nature Type", apiField: "natureType", value: "Water Release" }, */
   {
     category: "Nature Type",
     apiField: "natureType",
@@ -28,6 +28,11 @@ export const connections: Connection[] = [
     category: "Classification",
     apiField: "personal.classification",
     value: "Sage",
+  },
+  {
+    category: "Classification", // Tailed Beast
+    apiField: "personal.classification",
+    value: "Tailed Beast",
   },
   {
     category: "Classification",
@@ -60,17 +65,49 @@ export const connections: Connection[] = [
     apiField: "personal.team",
     value: "Seven Ninja Swordsmen of the Mist",
   },
+  {
+    category: "Team",
+    apiField: "personal.team",
+    value: "Team Hiruzen",
+  },
+  {
+    category: "Team",
+    apiField: "personal.team",
+    value: "Team Minato",
+  },
+  {
+    category: "Team",
+    apiField: "personal.team",
+    value: "Team Ebisu",
+  },
+  {
+    category: "Team",
+    apiField: "personal.team",
+    value: "Team Tobirama",
+  },
+  {
+    category: "Team",
+    apiField: "personal.team",
+    value: "Taka",
+  }, //Team Hiruzen,Team Minato,Team Ebisu,Team Tobirama,
+
   { category: "Clan", apiField: "personal.clan", value: "Uzumaki" },
   { category: "Clan", apiField: "personal.clan", value: "Uchiha" },
   { category: "Clan", apiField: "personal.clan", value: "Sarutobi" },
   { category: "Clan", apiField: "personal.clan", value: "Hyūga" },
   { category: "Clan", apiField: "personal.clan", value: "Senju" },
-  { category: "Clan", apiField: "personal.clan", value: "Ōtsutsuki" },
-  {
+  { category: "Clan", apiField: "personal.clan", value: "Aburame" },
+  { category: "Clan", apiField: "personal.clan", value: "Akimichi" },
+  { category: "Clan", apiField: "personal.clan", value: "Nara" },
+  { category: "Clan", apiField: "personal.clan", value: "Inuzuka" }, //Aburame, Akimichi, Nara, Inuzuka,
+  /* {
     category: "Affiliation",
     apiField: "personal.affiliation",
     value: "Konohagakure",
-  },
+  }, */
+  { category: "Species", apiField: "personal.species", value: "Dog" },
+
+  //"personal": {        "species": "Dog",
   {
     category: "Affiliation",
     apiField: "personal.affiliation",
