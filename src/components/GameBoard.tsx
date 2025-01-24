@@ -142,7 +142,7 @@ const fetchCharacterData = async (
   connection: Connection,
   selectedIds: Set<number>
 ) => {
-  let allCharacters: { id: number; name: string; image: string }[] = [];
+  let scannedCharacters: { id: number; name: string; image: string }[] = [];
   let page = 1;
   const limit = 100;
 
@@ -173,16 +173,14 @@ const fetchCharacterData = async (
           }
         );
 
-        filteredCharacters.forEach((character: Character) => {
-          if (!selectedIds.has(character.id) && allCharacters.length < 4) {
-            allCharacters.push({
-              id: character.id,
-              name: character.name,
-              image: character.images[0] || "", // Ensure image is handled properly
-            });
-            selectedIds.add(character.id);
-          }
-        });
+        // Store all scanned characters
+        scannedCharacters.push(
+          ...filteredCharacters.map((character: Character) => ({
+            id: character.id,
+            name: character.name,
+            image: character.images[0] || "",
+          }))
+        );
 
         if (response.data.characters.length < limit) {
           break;
@@ -193,6 +191,26 @@ const fetchCharacterData = async (
         break;
       }
     }
+
+    // Log all scanned characters before selection
+    console.log(
+      `Scanned characters for ${connection.category} - ${connection.value}:`,
+      scannedCharacters
+    );
+
+    // Randomly select 4 unique characters from scannedCharacters after all pages are processed
+    const shuffledCharacters = scannedCharacters.sort(
+      () => Math.random() - 0.5
+    );
+
+    const allCharacters: { id: number; name: string; image: string }[] = [];
+
+    shuffledCharacters.forEach((character) => {
+      if (!selectedIds.has(character.id) && allCharacters.length < 4) {
+        allCharacters.push(character);
+        selectedIds.add(character.id);
+      }
+    });
 
     return allCharacters;
   } catch (error) {
@@ -205,6 +223,7 @@ const RandomConnections: React.FC = () => {
   const [connectionsWithData, setConnectionsWithData] = useState<Connection[]>(
     []
   );
+  const [showHint, setShowHint] = useState<boolean>(false);
   const [selectedCharacters, setSelectedCharacters] = useState<number[]>([]);
   const [resultMessage, setResultMessage] = useState<string>("");
   const [correctConnections, setCorrectConnections] = useState<Connection[]>(
@@ -223,27 +242,48 @@ const RandomConnections: React.FC = () => {
     console.log("Initial characters set:", initialCharacters);
   }, [initialCharacters]);
 
-  const initializeBoard = (newBoard: boolean) => {
+  const initializeBoard = async (newBoard: boolean) => {
+    console.log(newBoard);
     setCorrectConnections([]);
     setAttemptsLeft(3);
     setSelectedCharacters([]);
+    setShowHint(false);
+
     const selectedIds = new Set<number>();
-    const selectedConnections = connections
-      .sort(() => 0.5 - Math.random())
-      .slice(0, 4);
-    Promise.all(
-      selectedConnections.map(async (connection) => ({
-        ...connection,
-        characters: await fetchCharacterData(connection, selectedIds),
-      }))
-    ).then((updatedConnections) => {
-      setConnectionsWithData(updatedConnections);
-      const newCharacters = updatedConnections
+    let selectedConnections: Connection[] = [];
+    let availableConnections = [...connections];
+
+    while (selectedConnections.length < 4 && availableConnections.length > 0) {
+      const randomIndex = Math.floor(
+        Math.random() * availableConnections.length
+      );
+      const connection = availableConnections[randomIndex];
+
+      const characters = await fetchCharacterData(connection, selectedIds);
+
+      if (characters.length === 4) {
+        selectedConnections.push({ ...connection, characters });
+      }
+
+      availableConnections.splice(randomIndex, 1); // Remove the tested connection
+    }
+
+    if (selectedConnections.length < 4) {
+      console.error("Unable to find enough unique connections.");
+
+      return;
+    }
+
+    setConnectionsWithData(selectedConnections);
+    setInitialCharacters(
+      selectedConnections.flatMap((conn) => conn.characters || [])
+    );
+
+    setShuffledCharacters(
+      selectedConnections
         .flatMap((conn) => conn.characters || [])
-        .sort(() => 0.5 - Math.random());
-      setShuffledCharacters(newCharacters);
-      if (newBoard) setInitialCharacters(newCharacters);
-    });
+        .sort(() => Math.random() - 0.5)
+    );
   };
 
   useEffect(() => {
@@ -271,14 +311,11 @@ const RandomConnections: React.FC = () => {
         prev.filter((conn) => conn !== selectedConnection)
       );
       setSelectedCharacters([]);
-      if (connectionsWithData.length === 1) {
-        setResultMessage("Congratulations! You found all connections!");
-      }
     } else {
       setAttemptsLeft((prev) => (prev > 0 ? prev - 1 : 0));
       if (attemptsLeft - 1 <= 0) {
         setShuffledCharacters([]);
-        setResultMessage("No attempts left! Reset to try again.");
+        //setResultMessage("No attempts left! Reset to try again.");
       } else {
         setResultMessage("Wrong connection!");
       }
@@ -292,7 +329,22 @@ const RandomConnections: React.FC = () => {
       <button className="button" onClick={() => setShowNames(!showNames)}>
         {showNames ? "Hide Names" : "Show Names"}
       </button>
+      <button className="button" onClick={() => setShowHint(!showHint)}>
+        {showHint ? "Hide Hint" : "Show Hint"}
+      </button>
+      {showHint && (
+        <p>
+          <strong>Hints:</strong>{" "}
+          {connectionsWithData.map((conn) => conn.category).join(", ")}
+        </p>
+      )}
       <p className="attempts">Attempts Left: {Math.max(attemptsLeft, 0)}</p>
+      {connectionsWithData.length === 0 && (
+        <div className="win">Congratulations! You found all connections!</div>
+      )}
+      {attemptsLeft === 0 && (
+        <div className="lose">No attempts left! Reset to try again</div>
+      )}
       <p>{resultMessage}</p>
 
       <div className="correct-answers">
@@ -323,7 +375,6 @@ const RandomConnections: React.FC = () => {
         </div>
       ) : (
         <div>
-          <p>No attempts left. Please reset with a new board.</p>
           <h3>Correct Connections:</h3>
           {connectionsWithData.map((conn, index) => (
             <p key={index}>
@@ -352,6 +403,16 @@ const RandomConnections: React.FC = () => {
         <button className="button" onClick={() => setSelectedCharacters([])}>
           Reset Selection
         </button>
+        <div className="info">
+          Test your Naruto knowledge by finding hidden connections between
+          characters! You'll see a grid of 16 characters, each belonging to a
+          specific category such as clans, teams, affiliations, or abilities.
+          Your goal is to group characters that share a common attribute. Select
+          four characters that you think are connected, and if you're correct,
+          they'll be locked in as a correct connection. Keep going until you
+          find all the groups! You have three attempts to solve the puzzle—can
+          you uncover all the connections?
+        </div>
       </div>
     </div>
   );
