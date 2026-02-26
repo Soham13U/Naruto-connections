@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import { fetchAllCharacters } from "../api";
 import "../App.css";
 
 export interface Connection {
@@ -138,85 +138,67 @@ export const connections: Connection[] = [
 
 type Character = { id: number; name: string; images: string[] };
 
-const fetchCharacterData = async (
+const getCharactersForConnection = (
   connection: Connection,
+  allCharacters: Record<string, any>[],
   selectedIds: Set<number>
 ) => {
-  let scannedCharacters: { id: number; name: string; image: string }[] = [];
-  let page = 1;
-  const limit = 100;
+  const scannedCharacters: { id: number; name: string; image: string }[] = [];
 
-  try {
-    while (true) {
-      const response = await axios.get(
-        `https://dattebayo-api.onrender.com/characters`,
-        {
-          params: { page, limit },
-        }
-      );
-
-      if (response.data && response.data.characters.length > 0) {
-        const filteredCharacters = response.data.characters.filter(
-          (character: Record<string, any>) => {
-            const attribute = connection.apiField
-              .split(".")
-              .reduce((obj, key) => obj?.[key], character);
-
-            if (Array.isArray(attribute)) {
-              return attribute.some(
-                (val: string) =>
-                  val.toLowerCase() === connection.value.toLowerCase()
-              );
-            }
-
-            return attribute?.toLowerCase() === connection.value.toLowerCase();
-          }
+  const filteredCharacters = allCharacters.filter(
+    (character: Record<string, any>) => {
+      const attribute = connection.apiField
+        .split(".")
+        .reduce(
+          (obj, key) => (obj ? (obj as Record<string, any>)[key] : undefined),
+          character as Record<string, any> | undefined
         );
 
-        // Store all scanned characters
-        scannedCharacters.push(
-          ...filteredCharacters.map((character: Character) => ({
-            id: character.id,
-            name: character.name,
-            image: character.images[0] || "",
-          }))
+      if (Array.isArray(attribute)) {
+        return attribute.some(
+          (val: string) =>
+            val.toLowerCase() === connection.value.toLowerCase()
         );
-
-        if (response.data.characters.length < limit) {
-          break;
-        }
-
-        page++;
-      } else {
-        break;
       }
+
+      return typeof attribute === "string"
+        ? attribute.toLowerCase() === connection.value.toLowerCase()
+        : false;
     }
+  );
 
-    // Log all scanned characters before selection
-    console.log(
-      `Scanned characters for ${connection.category} - ${connection.value}:`,
-      scannedCharacters
-    );
+  scannedCharacters.push(
+    ...filteredCharacters.map((character: Character & Record<string, any>) => ({
+      id: character.id,
+      name: character.name,
+      image: Array.isArray(character.images) ? character.images[0] || "" : "",
+    }))
+  );
 
-    // Randomly select 4 unique characters from scannedCharacters after all pages are processed
-    const shuffledCharacters = scannedCharacters.sort(
-      () => Math.random() - 0.5
-    );
+  console.log(
+    `Scanned characters for ${connection.category} - ${connection.value}:`,
+    scannedCharacters
+  );
 
-    const allCharacters: { id: number; name: string; image: string }[] = [];
+  const shuffledCharacters = scannedCharacters.sort(() => Math.random() - 0.5);
 
-    shuffledCharacters.forEach((character) => {
-      if (!selectedIds.has(character.id) && allCharacters.length < 4) {
-        allCharacters.push(character);
-        selectedIds.add(character.id);
-      }
-    });
+  const selectedCharactersForConnection: {
+    id: number;
+    name: string;
+    image: string;
+  }[] = [];
 
-    return allCharacters;
-  } catch (error) {
-    console.error(`Error fetching data for ${connection.value}:`, error);
-    return [];
-  }
+  shuffledCharacters.forEach((character) => {
+    if (
+      !selectedIds.has(character.id) &&
+      selectedCharactersForConnection.length < 4
+    ) {
+      selectedCharactersForConnection.push(character);
+      selectedIds.add(character.id);
+    }
+  });
+
+  return selectedCharactersForConnection;
 };
 
 const RandomConnections: React.FC = () => {
@@ -237,12 +219,38 @@ const RandomConnections: React.FC = () => {
   const [initialCharacters, setInitialCharacters] = useState<
     { id: number; name: string; image: string }[]
   >([]);
+  const [allCharacters, setAllCharacters] = useState<Record<string, any>[]>(
+    []
+  );
+  const [isLoadingCharacters, setIsLoadingCharacters] =
+    useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     console.log("Initial characters set:", initialCharacters);
   }, [initialCharacters]);
 
-  const initializeBoard = async (newBoard: boolean) => {
+  useEffect(() => {
+    const loadCharacters = async () => {
+      setIsLoadingCharacters(true);
+      setLoadError(null);
+
+      const characters = await fetchAllCharacters();
+
+      if (!characters.length) {
+        setLoadError(
+          "Unable to load character data. Please try again later."
+        );
+      }
+
+      setAllCharacters(characters);
+      setIsLoadingCharacters(false);
+    };
+
+    loadCharacters();
+  }, []);
+
+  const initializeBoard = (newBoard: boolean, allChars: Record<string, any>[]) => {
     console.log(newBoard);
     setCorrectConnections([]);
     setAttemptsLeft(3);
@@ -259,7 +267,11 @@ const RandomConnections: React.FC = () => {
       );
       const connection = availableConnections[randomIndex];
 
-      const characters = await fetchCharacterData(connection, selectedIds);
+      const characters = getCharactersForConnection(
+        connection,
+        allChars,
+        selectedIds
+      );
 
       if (characters.length === 4) {
         selectedConnections.push({ ...connection, characters });
@@ -287,13 +299,24 @@ const RandomConnections: React.FC = () => {
   };
 
   useEffect(() => {
-    initializeBoard(true);
-  }, []);
+    if (allCharacters.length > 0) {
+      initializeBoard(true, allCharacters);
+    }
+  }, [allCharacters]);
 
   const handleCharacterClick = (id: number) => {
-    setSelectedCharacters((prev) =>
-      prev.includes(id) ? prev.filter((charId) => charId !== id) : [...prev, id]
-    );
+    setSelectedCharacters((prev) => {
+      // If already selected, deselect it
+      if (prev.includes(id)) {
+        return prev.filter((charId) => charId !== id);
+      }
+      // If we have 4 selected, don't allow selecting another card
+      if (prev.length >= 4) {
+        return prev; // Return unchanged - user must deselect first
+      }
+      // Otherwise, add to selection
+      return [...prev, id];
+    });
   };
 
   const checkSelection = () => {
@@ -325,7 +348,20 @@ const RandomConnections: React.FC = () => {
 
   return (
     <div className="random-connections-container">
-      <h2>Naruto Connections</h2>
+      <div className="nc-header-row">
+        <div className="nc-title-block">
+          <h2>Naruto Connections</h2>
+          <p className="nc-subtitle">
+            Group Naruto characters by hidden traits, clans, teams, and more.
+          </p>
+        </div>
+      </div>
+      {isLoadingCharacters && (
+        <p className="nc-loading-text">
+          Summoning shinobi from the Dattebayo archives...
+        </p>
+      )}
+      {loadError && <p className="nc-error-text">{loadError}</p>}
       <button className="button" onClick={() => setShowNames(!showNames)}>
         {showNames ? "Hide Names" : "Show Names"}
       </button>
@@ -339,7 +375,7 @@ const RandomConnections: React.FC = () => {
         </p>
       )}
       <p className="attempts">Attempts Left: {Math.max(attemptsLeft, 0)}</p>
-      {connectionsWithData.length === 0 && (
+      {connectionsWithData.length === 0 && !isLoadingCharacters && (
         <div className="win">Congratulations! You found all connections!</div>
       )}
       {attemptsLeft === 0 && (
@@ -349,38 +385,59 @@ const RandomConnections: React.FC = () => {
 
       <div className="correct-answers">
         {correctConnections.map((conn, index) => (
-          <p key={index}>
-            <strong>{conn.category}:</strong> {conn.value} -{" "}
-            {conn.characters?.map((char) => `${char.name} `).join(", ")}
-          </p>
+          <div key={index} className="nc-connection-row">
+            <div className="nc-connection-header">
+              <span className="nc-connection-category">{conn.category}</span>
+              <span className="nc-connection-value">{conn.value}</span>
+            </div>
+            <div className="nc-connection-characters">
+              {conn.characters?.map((char) => char.name).join(", ")}
+            </div>
+          </div>
         ))}
       </div>
 
-      {shuffledCharacters.length > 0 ? (
-        <div className="characters-grid">
-          {shuffledCharacters.map((char) => (
-            <div
-              key={char.id}
-              onClick={() => handleCharacterClick(char.id)}
-              className={`character-card ${
-                selectedCharacters.includes(char.id) ? "selected" : ""
-              }`}
-            >
-              <img src={char.image} alt={char.name} />
-              {(showNames || attemptsLeft === 0) && (
-                <div className="show-name">{char.name}</div>
-              )}
-            </div>
+      {isLoadingCharacters ? (
+        <div className="characters-grid nc-grid-skeleton">
+          {Array.from({ length: 16 }).map((_, index) => (
+            <div key={index} className="character-card nc-card-skeleton" />
           ))}
         </div>
+      ) : shuffledCharacters.length > 0 ? (
+        <div className="characters-grid">
+          {shuffledCharacters.map((char) => {
+            const isSelected = selectedCharacters.includes(char.id);
+            const isDisabled = !isSelected && selectedCharacters.length >= 4;
+            return (
+              <div
+                key={char.id}
+                onClick={() => handleCharacterClick(char.id)}
+                className={`character-card ${
+                  isSelected ? "selected" : ""
+                } ${isDisabled ? "disabled" : ""}`}
+              >
+                <div className="nc-card-highlight-ring" />
+                <img src={char.image} alt={char.name} />
+                {(showNames || attemptsLeft === 0) && (
+                  <div className="show-name">{char.name}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : (
-        <div>
-          <h3>Correct Connections:</h3>
+        <div className="correct-answers nc-endgame-summary">
+          <h3>Remaining Connections</h3>
           {connectionsWithData.map((conn, index) => (
-            <p key={index}>
-              <strong>{conn.category}:</strong> {conn.value} -{" "}
-              {conn.characters?.map((char) => `${char.name}`).join(", ")}
-            </p>
+            <div key={index} className="nc-connection-row">
+              <div className="nc-connection-header">
+                <span className="nc-connection-category">{conn.category}</span>
+                <span className="nc-connection-value">{conn.value}</span>
+              </div>
+              <div className="nc-connection-characters">
+                {conn.characters?.map((char) => char.name).join(", ")}
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -396,7 +453,15 @@ const RandomConnections: React.FC = () => {
           Submit
         </button>
 
-        <button className="button" onClick={() => initializeBoard(true)}>
+        <button
+          className="button"
+          onClick={() =>
+            allCharacters.length > 0 && initializeBoard(true, allCharacters)
+          }
+          disabled={
+            isLoadingCharacters || allCharacters.length === 0
+          }
+        >
           Reset with New Board
         </button>
 

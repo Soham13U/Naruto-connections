@@ -31,3 +31,41 @@ export const fetchCharacters = async (
     return [];
   }
 };
+
+export const fetchAllCharacters = async (): Promise<
+  Record<string, any>[]
+> => {
+  const allCharacters: Record<string, any>[] = [];
+  let page = 1;
+  const limit = 100;
+
+  try {
+    while (true) {
+      const response = await axios.get<{
+        characters: Record<string, any>[];
+      }>(`${BASE_URL}/characters`, {
+        params: { page, limit },
+      });
+
+      const characters = response.data?.characters ?? [];
+
+      if (!characters.length) {
+        break;
+      }
+
+      allCharacters.push(...characters);
+
+      if (characters.length < limit) {
+        break;
+      }
+
+      page++;
+    }
+
+    console.log("Fetched all characters:", allCharacters.length);
+    return allCharacters;
+  } catch (error) {
+    console.error("Error fetching all characters:", error);
+    return [];
+  }
+};
