@@ -157,22 +157,32 @@ const getCharactersForConnection = (
       if (Array.isArray(attribute)) {
         return attribute.some(
           (val: string) =>
+            typeof val === "string" &&
             val.toLowerCase() === connection.value.toLowerCase()
         );
       }
 
-      return typeof attribute === "string"
-        ? attribute.toLowerCase() === connection.value.toLowerCase()
-        : false;
+      if (attribute == null) {
+        return false;
+      }
+
+      // Fallback: coerce to string safely, then compare case-insensitively
+      return String(attribute).toLowerCase() === connection.value.toLowerCase();
     }
   );
 
   scannedCharacters.push(
-    ...filteredCharacters.map((character: Character & Record<string, any>) => ({
-      id: character.id,
-      name: character.name,
-      image: Array.isArray(character.images) ? character.images[0] || "" : "",
-    }))
+    ...filteredCharacters.map((character) => {
+      const typedCharacter = character as Character;
+
+      return {
+        id: typedCharacter.id,
+        name: typedCharacter.name,
+        image: Array.isArray(typedCharacter.images)
+          ? typedCharacter.images[0] || ""
+          : "",
+      };
+    })
   );
 
   console.log(
